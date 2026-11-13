@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-title" content="Pit Window">
+<meta name="theme-color" content="#000000">
+<title>Pit Window – Iron-man</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none;overflow:hidden}
+  .screen{position:fixed;inset:0;display:none;flex-direction:column}
+  .screen.on{display:flex}
+
+  /* ---------- setup ---------- */
+  #setup{overflow:auto;padding:20px 18px 40px;background:#111;-webkit-user-select:auto;user-select:auto}
+  #setup h1{font-size:24px;margin-bottom:4px}
+  #setup p.lead{color:#aaa;font-size:14px;margin-bottom:16px;line-height:1.45}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #2a2a2a;gap:12px}
+  .row label{font-size:16px}
+  .row small{display:block;color:#888;font-size:12px;margin-top:2px}
+  .row input,.row select{width:96px;font-size:18px;padding:8px;border-radius:8px;border:1px solid #444;background:#222;color:#fff;text-align:right}
+  .btn{display:block;width:100%;font-size:20px;font-weight:700;padding:16px;border-radius:14px;border:0;margin-top:18px;background:#1fa83a;color:#000}
+  .btn.sec{background:#333;color:#fff;font-weight:600;font-size:16px}
+  #plan{margin-top:16px;font-size:14px;color:#ccc;line-height:1.55;background:#1a1a1a;border-radius:10px;padding:12px}
+  #plan b{color:#fff}
+
+  /* ---------- race ---------- */
+  #run{touch-action:none;align-items:center;justify-content:center;transform-origin:center center}
+  #hist{position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:12px;font-size:5vmin;line-height:1.35;font-weight:700;
+        font-variant-numeric:tabular-nums;opacity:.85;text-align:left}
+  #big{font-size:31vmin;font-weight:900;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  #msg{position:absolute;left:0;right:0;bottom:22%;text-align:center;font-size:10vmin;font-weight:900;letter-spacing:.02em}
+  #summary{font-size:5vmin;line-height:1.6;margin-top:4vmin;text-align:left;font-variant-numeric:tabular-nums}
+  #mid{display:flex;flex-direction:column;align-items:center}
+  #holdbar{position:absolute;left:0;bottom:0;height:3%;width:0;background:#fff;mix-blend-mode:difference}
+  #undo{position:absolute;left:10px;bottom:calc(env(safe-area-inset-bottom) + 20px);font-size:12px;padding:7px 9px;border-radius:8px;
+        background:transparent;color:#fff;border:1px solid rgba(255,255,255,.25);opacity:.45}
+  #race{position:absolute;top:calc(env(safe-area-inset-top) + 10px);right:12px;font-size:5vmin;font-weight:700;opacity:.85;font-variant-numeric:tabular-nums;text-align:right}
+  #test{font-size:3.6vmin;opacity:.7}
+  #delta{position:absolute;right:12px;bottom:calc(env(safe-area-inset-bottom) + 18px);font-size:8vmin;font-weight:800;font-variant-numeric:tabular-nums}
+  #delta small{display:block;font-size:3.2vmin;font-weight:700;opacity:.6;text-align:right}
+  #wlwarn{position:absolute;left:10px;bottom:calc(env(safe-area-inset-bottom) + 58px);font-size:11px;max-width:60%;opacity:.6;display:none}
+
+  .black{background:#000;color:#fff}
+  .green{background:#13b52c;color:#000}
+  .flash{color:#fff;animation:flashR .4s steps(1) infinite}
+  @keyframes flashR{0%{background:#e00000}50%{background:#000}}
+  .done{background:#111;color:#fff}
+</style>
+</head>
+<body>
+
+<!-- ================= SETUP ================= -->
+<div id="setup" class="screen">
+  <h1>🏁 Pit Window – Iron-man</h1>
+  <p class="lead">
+    The screen shows only the <b>current stint time</b>.<br>
+    <b>BLACK</b> = do not pit yet ·
+    <b style="color:#3f3">GREEN + WINDOW OPEN</b> = pit allowed ·
+    <b style="color:#f33">FLASHING RED</b> = window about to close (or closed) – pit NOW.<br>
+    Previous stint times: top-left. Race time: top-right. Bottom-right: <b>delta</b> = current stint minus the average stint still needed (− early, + late). Past the max stint the screen goes plain black. Last stint: only the race time, big. The race screen always stays upright (portrait).<br><br>
+    You touch the screen only <b>at the race start</b> and <b>every time you leave the pits</b>.
+    Hold your finger anywhere on the screen until the bar at the bottom fills (prevents accidental touches). <b>Draw 2 circles</b> with your finger on the race screen to come back to this menu – the race keeps running, tap “Resume current race” to go back.
+    The pit entry time is worked out as <i>exit time − pit stop time</i>.
+  </p>
+
+  <div class="row"><label>Race length (min)</label><input id="c_race" type="number" inputmode="decimal" step="1"></div>
+  <div class="row"><label>Number of stints<small id="stopsInfo"></small></label><input id="c_stints" type="number" inputmode="numeric" step="1"></div>
+  <div class="row"><label>Pit stop (s)<small>from pit entry to pit exit</small></label><input id="c_pit" type="number" inputmode="numeric" step="1"></div>
+  <div class="row"><label>Min stint (min)</label><input id="c_min" type="number" inputmode="decimal" step="0.5"></div>
+  <div class="row"><label>Max stint (min)</label><input id="c_max" type="number" inputmode="decimal" step="0.5"></div>
+  <div class="row"><label>Warning (min)<small>flashing red before the window closes</small></label><input id="c_warn" type="number" inputmode="decimal" step="0.5"></div>
+  <div class="row"><label>Safety margin (s)<small>window opens this much after the min and closes this much before the max</small></label><input id="c_res" type="number" inputmode="numeric" step="5"></div>
+  <div class="row"><label>Final lap allowance (s)<small>driving after the race clock hits zero, until the flag</small></label><input id="c_ext" type="number" inputmode="numeric" step="10"></div>
+  <div class="row"><label>Hold time (s)<small>how long to hold for a tap to count</small></label><input id="c_hold" type="number" inputmode="decimal" step="0.1"></div>
+  <div class="row"><label>Speed (test)<small>to try it at home</small></label>
+    <select id="c_speed"><option value="1">1× (race)</option><option value="10">10×</option><option value="30">30×</option><option value="60">60×</option></select></div>
+
+  <div id="plan"></div>
+
+  <button class="btn" id="arm">New race – get ready for the start ▶</button>
+  <button class="btn sec" id="resume" style="display:none">Resume current race</button>
+</div>
+
+<!-- ================= RACE ================= -->
+<div id="run" class="screen black">
+  <div id="hist"></div>
+  <div id="race"><span id="raceT"></span><div id="test"></div></div>
+  <div id="delta"></div>
+  <div id="mid"><div id="big"></div><div id="summary"></div></div>
+  <div id="msg"></div>
+  <div id="holdbar"></div>
+  <button id="undo">↶ undo (hold)</button>
+  <div id="wlwarn">Set Auto-Lock to Never.</div>
+</div>
+
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const DEF={race:80,stints:5,pit:90,min:8,max:20,warn:2,res:10,ext:60,hold:0.5,speed:1};
+const KEYS={race:'c_race',stints:'c_stints',pit:'c_pit',min:'c_min',max:'c_max',warn:'c_warn',res:'c_res',ext:'c_ext',hold:'c_hold',speed:'c_speed'};
+
+function load(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function del(k){try{localStorage.removeItem(k)}catch(e){}}
+
+let cfg=Object.assign({},DEF,load('pitw_cfg')||{});
+let st=load('pitw_state'); // {cfg, realStart, phase:'armed'|'drive'|'done', n, S, log, hist}
+
+/* ---------- helpers ---------- */
+function fmt(ms){
+  const neg=ms<0; ms=Math.abs(ms);
+  const s=Math.floor(ms/1000), m=Math.floor(s/60), r=s%60;
+  return (neg?'-':'')+m+':'+String(r).padStart(2,'0');
+}
+const up=ms=>fmt(Math.max(0,ms)+999); // countdown rounded up
+function vt(){return (Date.now()-st.realStart)*st.cfg.speed}
+function C(c){const M=60000;return{R:c.race*M,N:c.stints|0,P:c.pit*1000,MIN:c.min*M,MAX:c.max*M,W:c.warn*M,RES:c.res*1000,EXT:c.ext*1000}}
+
+/* Pit-entry window for stint n (1..N-1) that started at S (ms since race start).
+   k = stints still to come after this one. After entering now, remaining driving
+   = R - tEntry - k*P, and it must fit into k stints each between MIN and MAX:
+     k*MIN <= R - tEntry - k*P <= k*MAX   (MAX side uses R+EXT: the last lap runs past the clock)
+   -> pitting too EARLY would force a later stint over MAX  => window opens later
+   -> pitting too LATE would force a later stint under MIN  => window closes earlier */
+function windowFor(c,n,S){
+  const x=C(c), k=x.N-n;
+  if(k<=0) return null;
+  let open = Math.max(S+x.MIN+x.RES, x.R+x.EXT - k*(x.P+x.MAX) + x.RES*k);
+  let close= Math.min(S+x.MAX-x.RES, x.R - k*(x.P+x.MIN) - x.RES*k);
+  if(open>close){ // margins ate the window -> fall back to the hard limits
+    open = Math.max(S+x.MIN, x.R+x.EXT - k*(x.P+x.MAX));
+    close= Math.min(S+x.MAX, x.R - k*(x.P+x.MIN));
+    if(open>close) open=close; // rules can no longer all be met -> pit as soon as possible
+  }
+  // what closes the window: this stint's max, or the stops still to do (each next stint needs >= MIN)
+  const forced = close < S+x.MAX-x.RES-1000;
+  return {open,close,forced,stopsLeft:k};
+}
+
+/* ---------- setup ---------- */
+function fillSetup(){
+  for(const k in KEYS){$(KEYS[k]).value=cfg[k]}
+  $('resume').style.display=(st&&(st.phase==='drive'||st.phase==='armed'))?'block':'none';
+  showPlan();
+}
+function readSetup(){
+  for(const k in KEYS){const v=parseFloat($(KEYS[k]).value); if(!isNaN(v)) cfg[k]=v;}
+  save('pitw_cfg',cfg);
+}
+function showPlan(){
+  readSetup();
+  $('stopsInfo').textContent='= '+Math.max(0,(cfg.stints|0)-1)+' mandatory pit stops';
+  const x=C(cfg), totalDrive=x.R-(x.N-1)*x.P;
+  const ok=totalDrive>=x.N*x.MIN && totalDrive<=x.N*x.MAX+x.EXT;
+  let html=`${x.N-1} pit stops. Total driving: <b>${fmt(totalDrive)}</b> over ${x.N} stints (even split <b>${fmt(totalDrive/x.N)}</b> each).<br><br>`;
+  // even plan
+  let t=0, even=totalDrive/x.N;
+  html+='<b>Even plan</b> (race clock at pit entry):<br>';
+  for(let n=1;n<x.N;n++){t+=even; html+=`Stop ${n}: <b>${fmt(t)}</b><br>`; t+=x.P;}
+  html+='<br>Absolute limits if every earlier stint was as short / as long as allowed:<br>';
+  let early=0, late=0;
+  for(let n=1;n<x.N;n++){
+    const k=x.N-n;
+    const e=Math.max(early+x.MIN, x.R+x.EXT-k*(x.P+x.MAX));
+    const l=Math.min(late+x.MAX, x.R-k*(x.P+x.MIN));
+    html+=`Stop ${n}: earliest <b>${fmt(e)}</b>, latest <b>${fmt(l)}</b><br>`;
+    early=e+x.P; late=l+x.P;
+  }
+  html+='<span style="color:#888">During the race the window is recalculated after every stop from your real times.</span>';
+  if(!ok) html='<b style="color:#f55">These settings make the rules impossible!</b><br>'+html;
+  $('plan').innerHTML=html;
+}
+for(const k in KEYS){$(KEYS[k]).addEventListener('change',showPlan)}
+
+$('arm').onclick=()=>{
+  readSetup();
+  st={cfg:Object.assign({},cfg),phase:'armed',n:0,log:[],hist:[]};
+  save('pitw_state',st); unlockAudio(); wake(); lastCls=''; show('run'); render();
+};
+$('resume').onclick=()=>{unlockAudio(); wake(); lastCls=''; show('run'); render()};
+
+function show(id){document.querySelectorAll('.screen').forEach(e=>e.classList.toggle('on',e.id===id))}
+
+/* ---------- sound (muted if the iPhone is on silent) ---------- */
+let ac=null;
+function unlockAudio(){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)(); ac.resume&&ac.resume();}catch(e){}}
+function beep(f,n){try{if(!ac)return;for(let i=0;i<n;i++){const o=ac.createOscillator(),g=ac.createGain(),t0=ac.currentTime+i*.25;
+  o.frequency.value=f;o.connect(g);g.connect(ac.destination);g.gain.setValueAtTime(.6,t0);g.gain.exponentialRampToValueAtTime(.001,t0+.18);o.start(t0);o.stop(t0+.2)}}catch(e){}}
+
+/* ---------- keep screen on ---------- */
+async function wake(){
+  try{ if('wakeLock' in navigator){ await navigator.wakeLock.request('screen'); $('wlwarn').style.display='none'; return; } }catch(e){}
+  $('wlwarn').style.display='block';
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&st&&st.phase!=='done')wake()});
+
+/* ---------- actions ---------- */
+function snapshot(){const c=JSON.parse(JSON.stringify(st));delete c.hist;st.hist.push(c);if(st.hist.length>30)st.hist.shift()}
+function action(){
+  const x=C(st.cfg);
+  if(st.phase==='armed'){
+    snapshot(); st.realStart=Date.now(); st.phase='drive'; st.n=1; st.S=0; beep(1200,1);
+  }else if(st.phase==='drive'){
+    if(st.n>=x.N){ return; } // last stint: nothing to tap, the race ends by itself
+    snapshot();
+    const exit=vt(), entry=Math.max(st.S, exit-x.P), len=entry-st.S;
+    const w=windowFor(st.cfg,st.n,st.S);
+    st.log.push({n:st.n,len,entry,ok:entry>=w.open-1500&&entry<=w.close+1500});
+    st.n++; st.S=exit; beep(1200,1);
+  }else if(st.phase==='done'){
+    st=null; del('pitw_state'); fillSetup(); show('setup'); return;
+  }
+  lastCls=''; save('pitw_state',st); render();
+}
+function undo(){
+  if(!st||!st.hist||!st.hist.length)return;
+  const h=st.hist, prev=h.pop();
+  st=prev; st.hist=h; lastCls=''; save('pitw_state',st); render(); beep(400,1);
+}
+
+/* ---------- hold to confirm ---------- */
+let holdStart=0, holdFn=null, raf=null;
+function startHold(fn,mult){
+  cancelHold(); holdFn=fn; holdStart=performance.now();
+  const dur=(st?st.cfg.hold:cfg.hold)*1000*(mult||1);
+  const bar=$('holdbar');
+  const step=()=>{const p=Math.min(1,(performance.now()-holdStart)/dur); bar.style.width=(p*100)+'%';
+    if(p>=1){const f=holdFn;cancelHold();f();} else raf=requestAnimationFrame(step)};
+  raf=requestAnimationFrame(step);
+}
+function cancelHold(){if(raf)cancelAnimationFrame(raf);raf=null;holdFn=null;$('holdbar').style.width='0'}
+const run=$('run');
+/* gesture tracking: hold = action; draw 2 full circles = back to menu */
+let g=null; // {x0,y0,lx,ly,lastAng,turn,moved}
+run.addEventListener('pointerdown',e=>{
+  e.preventDefault(); unlockAudio();
+  g={x0:e.clientX,y0:e.clientY,lx:e.clientX,ly:e.clientY,lastAng:null,turn:0,moved:false};
+  if(e.target.id==='undo') startHold(undo,2);
+  else startHold(action, st&&st.phase==='done'?4:1);
+});
+run.addEventListener('pointermove',e=>{
+  if(!g) return;
+  if(!g.moved && Math.hypot(e.clientX-g.x0,e.clientY-g.y0)>15){ g.moved=true; cancelHold(); } // moving = not a hold
+  const dx=e.clientX-g.lx, dy=e.clientY-g.ly;
+  if(Math.hypot(dx,dy)<8) return; // ignore jitter
+  const ang=Math.atan2(dy,dx);
+  if(g.lastAng!==null){
+    let d=ang-g.lastAng;
+    while(d>Math.PI) d-=2*Math.PI;
+    while(d<-Math.PI) d+=2*Math.PI;
+    g.turn+=d;
+  }
+  g.lastAng=ang; g.lx=e.clientX; g.ly=e.clientY;
+  if(Math.abs(g.turn)>=2*2*Math.PI*0.92){ // ~2 full circles, either direction
+    g=null; cancelHold(); toMenu();
+  }
+});
+function endGesture(){g=null; cancelHold();}
+['pointerup','pointercancel'].forEach(ev=>run.addEventListener(ev,endGesture));
+function toMenu(){
+  beep(500,2);
+  if(st) save('pitw_state',st);
+  fillSetup(); show('setup');
+}
+run.addEventListener('touchstart',e=>e.preventDefault(),{passive:false});
+run.addEventListener('contextmenu',e=>e.preventDefault());
+
+/* ---------- render ---------- */
+let lastCls='';
+function setCls(c){
+  if(c===lastCls)return;
+  if(lastCls){ if(c==='green')beep(1000,2); else if(c==='flash')beep(1600,4); }
+  lastCls=c; run.className='screen on '+c;
+}
+function histHTML(){
+  return st.log.map(l=>`${l.n}. ${fmt(l.len)}`).join('<br>');
+}
+function render(){
+  if(!st) return;
+  const x=C(st.cfg);
+  $('undo').style.display=(st.hist&&st.hist.length)?'block':'none';
+  $('test').textContent=st.cfg.speed>1?('TEST '+st.cfg.speed+'×'):'';
+  $('summary').innerHTML='';
+
+  if(st.phase==='armed'){
+    setCls('black'); $('hist').innerHTML=''; $('raceT').textContent=''; $('delta').innerHTML='';
+    $('big').textContent='0:00'; $('msg').textContent='HOLD TO START'; return;
+  }
+  if(st.phase==='done'){
+    setCls('done'); $('hist').innerHTML=''; $('raceT').textContent=''; $('delta').innerHTML='';
+    $('big').textContent='🏁'; $('msg').textContent='';
+    const last=st.end-st.S;
+    $('summary').innerHTML=st.log.map(l=>`${l.ok?'✅':'⚠️'} Stint ${l.n}: <b>${fmt(l.len)}</b>`).join('<br>')
+      +`<br>${last>=x.MIN&&last<=x.MAX?'✅':'⚠️'} Stint ${x.N}: <b>${fmt(last)}</b><br><span style="opacity:.6;font-size:4vmin">hold 2 s for a new race</span>`;
+    return;
+  }
+
+  const t=vt(), len=t-st.S;
+  if(st.n>=x.N && t>x.R+x.EXT+60000){ st.phase='done'; st.end=Math.min(t,x.R+x.EXT); save('pitw_state',st); return render(); }
+
+  $('hist').innerHTML=histHTML();
+
+  if(st.n>=x.N){ // last stint: only the race time, big
+    setCls('black'); $('raceT').textContent=''; $('delta').innerHTML='';
+    $('big').textContent=fmt(t); $('msg').textContent='';
+    return;
+  }
+  $('raceT').textContent=fmt(t);
+
+  // delta: current stint vs average of the stints still to drive (incl. this one)
+  const k=x.N-st.n, avg=(x.R-st.S-k*x.P)/(k+1), d=len-avg;
+  $('delta').innerHTML=(d>=0?'+':'−')+fmt(Math.abs(d))+'<small>avg '+fmt(avg)+'</small>';
+
+  if(len>=x.MAX){ // past the max stint: blank black screen
+    setCls('black'); $('big').textContent=''; $('msg').textContent=''; return;
+  }
+  $('big').textContent=fmt(len);
+  const w=windowFor(st.cfg,st.n,st.S);
+  if(t<w.open){ setCls('black'); $('msg').textContent=''; }
+  else if(t<w.close-x.W){ setCls('green'); $('msg').textContent='WINDOW OPEN'; }
+  else if(t<w.close){ setCls('flash'); $('msg').innerHTML=w.forced?mustMsg(w):'PIT NOW'; }
+  else { setCls('flash'); $('msg').innerHTML=w.forced?mustMsg(w):'TOO LATE'; }
+}
+
+function mustMsg(w){
+  return 'MUST PIT NOW<div style="font-size:5vmin;margin-top:1vmin">'+w.stopsLeft+(w.stopsLeft>1?' STOPS':' STOP')+' LEFT – NO TIME LATER</div>';
+}
+
+/* ---------- always portrait: counter-rotate when the phone turns ---------- */
+function orient(){
+  const W=window.innerWidth, H=window.innerHeight;
+  let ang=0;
+  if(W>H){
+    let o=(typeof window.orientation==='number')?window.orientation:(screen.orientation?screen.orientation.angle:90);
+    if(o===270) o=-90;
+    ang=(o===-90)?90:-90;
+  }
+  if(ang){
+    Object.assign(run.style,{inset:'auto',width:H+'px',height:W+'px',left:((W-H)/2)+'px',top:((H-W)/2)+'px',transform:'rotate('+ang+'deg)'});
+  }else{
+    Object.assign(run.style,{inset:'0',width:'',height:'',left:'',top:'',transform:''});
+  }
+}
+window.addEventListener('resize',orient);
+window.addEventListener('orientationchange',()=>setTimeout(orient,50));
+if(screen.orientation&&screen.orientation.addEventListener) screen.orientation.addEventListener('change',orient);
+try{ screen.orientation&&screen.orientation.lock&&screen.orientation.lock('portrait').catch(()=>{}); }catch(e){}
+orient();
+
+setInterval(render,200);
+
+/* ---------- boot ---------- */
+fillSetup();
+if(st&&st.phase==='drive'){show('run');render()} else {show('setup')}
+})();
+</script>
+<script>
+if('serviceWorker' in navigator){ try{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }catch(e){} }
+</script>
+</body>
+</html>
